@@ -25,6 +25,7 @@ pipeline {
                 }
             }
         }
+    }
         stage('Install Dependencies') {
             steps {
                 script {
@@ -58,6 +59,5 @@ pipeline {
         failure {
             echo 'Hello failure!'
         }
-    }
     }
 }
