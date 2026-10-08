@@ -4,13 +4,14 @@ pipeline {
             label 'AGENT-1'
         }
     }
-    // environment { 
-    //     COURSE = 'jenkins'
-    // }
+    environment { 
+        appVersion = ''
+    }
     options {
                 // Timeout counter starts BEFORE agent is allocated
         timeout(time: 30, unit: 'MINUTES')
         disableConcurrentBuilds()
+        }
     }    
     // parameters {
     //     string(name: 'PERSON', defaultValue: 'Mr Jenkins', description: 'Who should I say hello to?')
@@ -20,17 +21,16 @@ pipeline {
     //     password(name: 'PASSWORD', defaultValue: 'SECRET', description: 'Enter a password')
     // }
     stages {
-        stage('Build') {
+        stage('Read package.json') {
             steps {
                 script {
-                    sh """
-                        echo "Building.."
-                        sleep 10
-                        env
-                    """
+                    def pkg = readJSON file: 'package.json'
+                    appVersion = package.json.version
+                    echo "package version: ${appVersion}"
                 }
             }
         }
+    }
         stage('Test') {
             steps {
                 script {
@@ -47,7 +47,6 @@ pipeline {
             }
         }
         
-    }
 
     post { 
         always { 
@@ -61,4 +60,3 @@ pipeline {
             echo 'Hello failure!'
         }
     }
-}
