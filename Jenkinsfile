@@ -4,81 +4,57 @@ pipeline {
             label 'AGENT-1'
         }
     }
-
     environment {
-        REGION    = "us-east-1"
-        ACC_ID    = "211125615103"
-        PROJECT   = "roboshop"
+        appVersion = ''
+        REGION ="us-east-1"
+        ACC_ID = "211125615103"
+        PROJECT = "roboshop"
         COMPONENT = "catalogue"
     }
-
     options {
         timeout(time: 30, unit: 'MINUTES')
         disableConcurrentBuilds()
     }
-
     stages {
-
         stage('Read package.json') {
             steps {
                 script {
                     def packageJson = readJSON file: 'package.json'
-                    env.APP_VERSION = packageJson.version
-
-                    echo "Package version: ${env.APP_VERSION}"
+                    appVersion = packageJson.version
+                    echo "package version: ${appVersion}"
                 }
             }
         }
-
         stage('Install Dependencies') {
             steps {
-                sh '''
-                    npm install
-                '''
-            }
-        }
-
-        stage('Docker Build & Push') {
-            steps {
                 script {
-                    withAWS(
-                        credentials: 'aws-creds',
-                        region: "${REGION}"
-                    ) {
-                        sh """
-                            echo "Logging into AWS ECR..."
-
-                            aws ecr get-login-password --region ${REGION} | \
-                            docker login \
-                            --username AWS \
-                            --password-stdin ${ACC_ID}.dkr.ecr.${REGION}.amazonaws.com
-
-                            echo "Building Docker image..."
-
-                            docker build \
-                            -t ${ACC_ID}.dkr.ecr.${REGION}.amazonaws.com/${PROJECT}/${COMPONENT}:${APP_VERSION} .
-
-                            echo "Pushing Docker image..."
-
-                            docker push \
-                            ${ACC_ID}.dkr.ecr.${REGION}.amazonaws.com/${PROJECT}/${COMPONENT}:${APP_VERSION}
-                        """
-                    }
+                    sh """
+                        npm install
+                    """
                 }
             }
         }
-    }
-
+        stage('Docker Build') {
+            steps {
+                script {
+                    withAWS(credentials: 'aws-creds', region: 'us-east-1') {
+                        sh """
+                            aws ecr get-login-password --region ${REGION} | docker login --username AWS --password-stdin ${ACC_ID}.dkr.ecr.us-east-1.amazonaws.com
+                            docker build -t ${ACC_ID}.dkr.ecr.us-east-1.amazonaws.com/${PROJECT}/${COMPONENT}:${appVersion}
+                            docker push ${ACC_ID}.dkr.ecr.us-east-1.amazonaws.com/${PROJECT}/${COMPONENT}:${appVersion}
+                        """
+                    }    
+                }
+            }
+        }
     post {
         always {
             echo 'I will always say Hello again!'
             deleteDir()
         }
-
         success {
             echo 'Hello success!'
         }
-
         failure {
             echo 'Hello failure!'
         }
