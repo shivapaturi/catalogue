@@ -6,7 +6,7 @@ pipeline {
     }
     environment {
         appVersion = ''
-        REGION ="us-east-1"
+        REGION = "us-east-1"
         ACC_ID = "211125615103"
         PROJECT = "roboshop"
         COMPONENT = "catalogue"
@@ -20,33 +20,28 @@ pipeline {
             steps {
                 script {
                     def packageJson = readJSON file: 'package.json'
-                    appVersion = packageJson.version
-                    echo "package version: ${appVersion}"
+                    env.appVersion = packageJson.version
+                    echo "package version: ${env.appVersion}"
                 }
             }
         }
         stage('Install Dependencies') {
             steps {
-                script {
-                    sh """
-                        npm install
-                    """
-                }
+                sh 'npm install'
             }
         }
         stage('Docker Build') {
             steps {
-                script {
-                    withAWS(credentials: 'aws-creds', region: 'us-east-1') {
-                        sh """
-                            aws ecr get-login-password --region ${REGION} | docker login --username AWS --password-stdin ${ACC_ID}.dkr.ecr.us-east-1.amazonaws.com
-                            docker build -t ${ACC_ID}.dkr.ecr.us-east-1.amazonaws.com/${PROJECT}/${COMPONENT}:${appVersion}
-                            docker push ${ACC_ID}.dkr.ecr.us-east-1.amazonaws.com/${PROJECT}/${COMPONENT}:${appVersion}
-                        """
-                    }    
+                withAWS(credentials: 'aws-creds', region: "${REGION}") {
+                    sh """
+                        aws ecr get-login-password --region ${REGION} | docker login --username AWS --password-stdin ${ACC_ID}.dkr.ecr.${REGION}.amazonaws.com
+                        docker build -t ${ACC_ID}.dkr.ecr.${REGION}.amazonaws.com/${PROJECT}/${COMPONENT}:${env.appVersion} .
+                        docker push ${ACC_ID}.dkr.ecr.${REGION}.amazonaws.com/${PROJECT}/${COMPONENT}:${env.appVersion}
+                    """
                 }
             }
         }
+    }
     post {
         always {
             echo 'I will always say Hello again!'
