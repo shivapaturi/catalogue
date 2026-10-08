@@ -4,38 +4,28 @@ pipeline {
             label 'AGENT-1'
         }
     }
-    environment { 
+    environment {
         appVersion = ''
     }
     options {
-                // Timeout counter starts BEFORE agent is allocated
         timeout(time: 30, unit: 'MINUTES')
         disableConcurrentBuilds()
-        }
-        
-    // parameters {
-    //     string(name: 'PERSON', defaultValue: 'Mr Jenkins', description: 'Who should I say hello to?')
-    //     text(name: 'BIOGRAPHY', defaultValue: '', description: 'Enter some information about the person')
-    //     booleanParam(name: 'TOGGLE', defaultValue: true, description: 'Toggle this value')
-    //     choice(name: 'CHOICE', choices: ['One', 'Two', 'Three'], description: 'Pick something')
-    //     password(name: 'PASSWORD', defaultValue: 'SECRET', description: 'Enter a password')
-    // }
+    }
     stages {
         stage('Read package.json') {
             steps {
                 script {
                     def pkg = readJSON file: 'package.json'
-                    env.appVersionVersion = pkg.version
+                    env.appVersion = pkg.version
                     echo "package version: ${env.appVersion}"
                 }
             }
         }
-    }
         stage('Test') {
             steps {
                 script {
                     echo 'Testing..'
-                }    
+                }
             }
         }
         stage('Deploy') {
@@ -43,20 +33,18 @@ pipeline {
                 script {
                     echo 'Deploying....'
                 }
-                
             }
         }
-        
-
-    post { 
-        always { 
+    }
+    post {
+        always {
             echo 'I will always say Hello again!'
             deleteDir()
         }
-        success { 
+        success {
             echo 'Hello success!'
         }
-        failure { 
+        failure {
             echo 'Hello failure!'
         }
     }
