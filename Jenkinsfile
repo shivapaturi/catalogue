@@ -25,9 +25,9 @@ pipeline {
             steps {
                 script {
                     def packageJson = readJSON file: 'package.json'
-                    env.APP_VERSION = packageJson.version
+                    env.appVersion = packageJson.version
 
-                    echo "Package version: ${env.APP_VERSION}"
+                    echo "Package version: ${env.appVersion}"
                 }
             }
         }
@@ -66,12 +66,12 @@ pipeline {
                             echo "Building Docker image..."
 
                             docker build \
-                            -t ${ACC_ID}.dkr.ecr.${REGION}.amazonaws.com/${PROJECT}/${COMPONENT}:${APP_VERSION} .
+                            -t ${ACC_ID}.dkr.ecr.${REGION}.amazonaws.com/${PROJECT}/${COMPONENT}:${appVersion} .
 
                             echo "Pushing Docker image..."
 
                             docker push \
-                            ${ACC_ID}.dkr.ecr.${REGION}.amazonaws.com/${PROJECT}/${COMPONENT}:${APP_VERSION}
+                            ${ACC_ID}.dkr.ecr.${REGION}.amazonaws.com/${PROJECT}/${COMPONENT}:${appVersion}
                         """
                     }
                 }
