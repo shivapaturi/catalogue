@@ -11,7 +11,6 @@
   "dependencies": {
     "body-parser": "^1.18.1",
     "express": "^4.15.4",
-    "redis": "^2.8.0",
     "mongodb": "^4.7.0",
     "pino": "^5.10.8",
     "express-pino-logger": "^4.0.0",
