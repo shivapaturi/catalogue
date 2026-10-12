@@ -46,7 +46,7 @@ app.use((req, res, next) => {
         "us-west1"
     ];
     let span = instana.currentSpan();
-    span.annotate('custom.sdk.tags.datacenter', dcs[Math.floor(Math.random() * dcs.length)]);
+    span.annotate('custom.sdk.tags.datacenter', dcs[crypto.randomInt(dcs.length)]);
 
     next();
 });
