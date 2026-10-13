@@ -120,22 +120,28 @@ pipeline {
                         region: "${REGION}"
                     ) {
                         sh """
+                            set -e
+
                             echo "Logging into AWS ECR..."
 
                             aws ecr get-login-password --region ${REGION} | \
                             docker login \
-                            --username AWS \
-                            --password-stdin ${ACC_ID}.dkr.ecr.${REGION}.amazonaws.com
+                                --username AWS \
+                                --password-stdin ${ACC_ID}.dkr.ecr.${REGION}.amazonaws.com
 
                             echo "Building Docker image..."
 
                             docker build \
-                            -t ${ACC_ID}.dkr.ecr.${REGION}.amazonaws.com/${PROJECT}/${COMPONENT}:${appVersion} .
+                                --provenance=false \
+                                --sbom=false \
+                                -t ${ACC_ID}.dkr.ecr.${REGION}.amazonaws.com/${PROJECT}/${COMPONENT}:${appVersion} .
 
                             echo "Pushing Docker image..."
 
                             docker push \
-                            ${ACC_ID}.dkr.ecr.${REGION}.amazonaws.com/${PROJECT}/${COMPONENT}:${appVersion}
+                                ${ACC_ID}.dkr.ecr.${REGION}.amazonaws.com/${PROJECT}/${COMPONENT}:${appVersion}
+
+                            echo "✅ Docker image pushed successfully."
                         """
                     }
                 }
