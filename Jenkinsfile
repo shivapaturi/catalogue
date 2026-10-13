@@ -26,14 +26,8 @@ pipeline {
             steps {
                 script {
                     def packageJson = readJSON file: 'package.json'
-
-                    env.APP_VERSION = packageJson.version?.toString()?.trim()
-
-                    if (!env.APP_VERSION) {
-                        error "❌ Version not found in package.json"
-                    }
-
-                    echo "✅ Package version: ${env.APP_VERSION}"
+                    appVersion = packageJson.version
+                    echo "Package version: ${env.APP_VERSION}"
                 }
             }
         }
