@@ -6,7 +6,7 @@ pipeline {
     }
 
     environment {
-        APP_VERSION = ''
+        APP_VERSION = "packageJson.version?.toString()?.trim()"
         REGION    = "us-east-1"
         ACC_ID    = "211125615103"
         PROJECT   = "roboshop"
