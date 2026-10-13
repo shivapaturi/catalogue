@@ -1,6 +1,6 @@
 # Stage 1: Builder
 
-FROM node:20-alpine3.21 AS builder
+FROM node:20-alpine3.20 AS builder
 WORKDIR /opt/server
 COPY package.json .
 RUN npm install
@@ -9,7 +9,7 @@ COPY *.js .
 
 # Stage 2: Runtime
 
-FROM node:20-alpine3.21
+FROM node:20-alpine3.20
 RUN addgroup -S roboshop && adduser -S roboshop -G roboshop
 ENV MONGO="true" \
     MONGO_URL="mongodb://mongodb:27017/catalogue"
