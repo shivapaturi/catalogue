@@ -69,36 +69,58 @@ pipeline {
         //     }
         // }
         stage('Check Dependabot Alerts') {
-            environment { 
+            environment {
                 GITHUB_TOKEN = credentials('github-token')
-            }
+             }
+
             steps {
                 script {
-                    // Fetch alerts from GitHub
                     def response = sh(
-                        script: """
-                            curl -s -H "Accept: application/vnd.github+json" \
-                                 -H "Authorization: token ${GITHUB_TOKEN}" \
-                                 https://api.github.com/repos/daws-84s/catalogue/dependabot/alerts
-                        """,
+                        script: '''
+                            curl -sS -L \
+                            -H "Accept: application/vnd.github+json" \
+                            -H "Authorization: Bearer $GITHUB_TOKEN" \
+                            -H "X-GitHub-Api-Version: 2026-03-10" \
+                            "https://api.github.com/repos/daws-84s/catalogue/dependabot/alerts"
+                        ''',
                         returnStdout: true
                     ).trim()
 
-                    // Parse JSON
-                    def json = readJSON text: response
+                    def json = readJSON(
+                        text: response,
+                        returnPojo: true
+                    )
 
-                    // Filter alerts by severity
+                    if (!(json instanceof List)) {
+                        error "❌ GitHub API returned an unexpected response: ${response}"
+                    }
+
                     def criticalOrHigh = json.findAll { alert ->
                         def severity = alert?.security_advisory?.severity?.toLowerCase()
                         def state = alert?.state?.toLowerCase()
-                        return (state == "open" && (severity == "critical" || severity == "high"))
+
+                        state == 'open' &&
+                        (severity == 'critical' || severity == 'high')
                     }
 
-                    if (criticalOrHigh.size() > 0) {
-                        error "❌ Found ${criticalOrHigh.size()} HIGH/CRITICAL Dependabot alerts. Failing pipeline!"
-                    } else {
-                        echo "✅ No HIGH/CRITICAL Dependabot alerts found."
+                    if (criticalOrHigh) {
+
+                        echo "❌ Found ${criticalOrHigh.size()} HIGH/CRITICAL Dependabot alert(s)"
+
+                        criticalOrHigh.each { alert ->
+                            echo """
+                            Package: ${alert?.dependency?.package?.name}
+                            Severity: ${alert?.security_advisory?.severity}
+                            CVE: ${alert?.security_advisory?.cve_id ?: 'N/A'}
+                            Vulnerable: ${alert?.security_vulnerability?.vulnerable_version_range}
+                            Fixed: ${alert?.security_vulnerability?.first_patched_version?.identifier ?: 'N/A'}
+                            """
+                        }
+
+                        error "Security gate failed!"
                     }
+
+                    echo "✅ No OPEN HIGH/CRITICAL Dependabot alerts found."
                 }
             }
         }
