@@ -78,10 +78,10 @@ pipeline {
                         def response = sh(
                             script: '''
                                 curl -sS -L \
-                                -H "Accept: application/vnd.github+json" \
-                                -H "Authorization: Bearer $GITHUB_TOKEN" \
-                                -H "X-GitHub-Api-Version: 2026-03-10" \
-                                "https://api.github.com/repos/daws-84s/catalogue/dependabot/alerts"
+                                    -H "Accept: application/vnd.github+json" \
+                                    -H "Authorization: Bearer $GITHUB_TOKEN" \
+                                    -H "X-GitHub-Api-Version: 2026-03-10" \
+                                    "https://api.github.com/repos/shivapaturi/catalogue/dependabot/alerts"
                             ''',
                             returnStdout: true
                         ).trim()
