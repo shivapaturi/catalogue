@@ -10,6 +10,7 @@ pipeline {
         ACC_ID    = "211125615103"
         PROJECT   = "roboshop"
         COMPONENT = "catalogue"
+        GITHUB_TOKEN = credentials('github-token')
     }
 
     options {
@@ -69,58 +70,45 @@ pipeline {
         //     }
         // }
         stage('Check Dependabot Alerts') {
-            environment {
-                GITHUB_TOKEN = credentials('github-token')
-             }
-
             steps {
-                script {
-                    def response = sh(
-                        script: '''
-                            curl -sS -L \
-                            -H "Accept: application/vnd.github+json" \
-                            -H "Authorization: Bearer $GITHUB_TOKEN" \
-                            -H "X-GitHub-Api-Version: 2026-03-10" \
-                            "https://api.github.com/repos/daws-84s/catalogue/dependabot/alerts"
-                        ''',
-                        returnStdout: true
-                    ).trim()
+                withCredentials([
+                    string(credentialsId: 'github-token', variable: 'GITHUB_TOKEN')
+                ]) {
+                    script {
+                        def response = sh(
+                            script: '''
+                                curl -sS -L \
+                                -H "Accept: application/vnd.github+json" \
+                                -H "Authorization: Bearer $GITHUB_TOKEN" \
+                                -H "X-GitHub-Api-Version: 2026-03-10" \
+                                "https://api.github.com/repos/daws-84s/catalogue/dependabot/alerts"
+                            ''',
+                            returnStdout: true
+                        ).trim()
 
-                    def json = readJSON(
-                        text: response,
-                        returnPojo: true
-                    )
+                        def json = readJSON(
+                            text: response,
+                            returnPojo: true
+                        )
 
-                    if (!(json instanceof List)) {
-                        error "❌ GitHub API returned an unexpected response: ${response}"
-                    }
-
-                    def criticalOrHigh = json.findAll { alert ->
-                        def severity = alert?.security_advisory?.severity?.toLowerCase()
-                        def state = alert?.state?.toLowerCase()
-
-                        state == 'open' &&
-                        (severity == 'critical' || severity == 'high')
-                    }
-
-                    if (criticalOrHigh) {
-
-                        echo "❌ Found ${criticalOrHigh.size()} HIGH/CRITICAL Dependabot alert(s)"
-
-                        criticalOrHigh.each { alert ->
-                            echo """
-                            Package: ${alert?.dependency?.package?.name}
-                            Severity: ${alert?.security_advisory?.severity}
-                            CVE: ${alert?.security_advisory?.cve_id ?: 'N/A'}
-                            Vulnerable: ${alert?.security_vulnerability?.vulnerable_version_range}
-                            Fixed: ${alert?.security_vulnerability?.first_patched_version?.identifier ?: 'N/A'}
-                            """
+                        if (!(json instanceof List)) {
+                            error "❌ GitHub API returned an unexpected response: ${json}"
                         }
 
-                        error "Security gate failed!"
-                    }
+                        def criticalOrHigh = json.findAll { alert ->
+                            def severity = alert?.security_advisory?.severity?.toLowerCase()
+                            def state = alert?.state?.toLowerCase()
 
-                    echo "✅ No OPEN HIGH/CRITICAL Dependabot alerts found."
+                            state == 'open' &&
+                            (severity == 'high' || severity == 'critical')
+                        }
+
+                        if (criticalOrHigh) {
+                            error "❌ Found ${criticalOrHigh.size()} OPEN HIGH/CRITICAL Dependabot alert(s)."
+                        }
+
+                        echo "✅ No OPEN HIGH/CRITICAL Dependabot alerts found."
+                    }
                 }
             }
         }
