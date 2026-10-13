@@ -69,78 +69,38 @@ pipeline {
         //     }
         // }
         stage('Check Dependabot Alerts') {
-            environment {
+            environment { 
                 GITHUB_TOKEN = credentials('github-token')
             }
-
             steps {
                 script {
-
+                    // Fetch alerts from GitHub
                     def response = sh(
-                        script: '''
-                            set -e
-
-                            curl -sS -L \
-                            -H "Accept: application/vnd.github+json" \
-                            -H "Authorization: Bearer $GITHUB_TOKEN" \
-                            -H "X-GitHub-Api-Version: 2026-03-10" \
-                            "https://api.github.com/repos/shivapaturi/catalogue/dependabot/alerts?state=open&severity=high,critical&per_page=100"
-                        ''',
+                        script: """
+                            curl -s -H "Accept: application/vnd.github+json" \
+                                 -H "Authorization: token ${GITHUB_TOKEN}" \
+                                 https://api.github.com/repos/daws-84s/catalogue/dependabot/alerts
+                        """,
                         returnStdout: true
                     ).trim()
 
-                    def json = readJSON(
-                        text: response,
-                        returnPojo: true
-                    )
+                    // Parse JSON
+                    def json = readJSON text: response
 
-                    if (!(json instanceof List)) {
-                        error "❌ GitHub API did not return a Dependabot alert list: ${json}"
+                    // Filter alerts by severity
+                    def criticalOrHigh = json.findAll { alert ->
+                        def severity = alert?.security_advisory?.severity?.toLowerCase()
+                        def state = alert?.state?.toLowerCase()
+                        return (state == "open" && (severity == "critical" || severity == "high"))
                     }
 
-                    if (json.size() > 0) {
-
-                        echo "❌ Found ${json.size()} OPEN HIGH/CRITICAL Dependabot alerts."
-
-                        json.each { alert ->
-
-                            def packageName =
-                                alert?.dependency?.package?.name ?: 'Unknown'
-
-                            def ecosystem =
-                                alert?.dependency?.package?.ecosystem ?: 'Unknown'
-
-                            def severity =
-                                alert?.security_advisory?.severity ?: 'Unknown'
-
-                            def cve =
-                                alert?.security_advisory?.cve_id ?: 'N/A'
-
-                            def vulnerableRange =
-                                alert?.security_vulnerability?.vulnerable_version_range ?: 'N/A'
-
-                            def fixedVersion =
-                                alert?.security_vulnerability?.first_patched_version?.identifier ?: 'N/A'
-
-                            echo """
-                            ----------------------------------------
-                            Package          : ${packageName}
-                            Ecosystem        : ${ecosystem}
-                            Severity          : ${severity}
-                            CVE               : ${cve}
-                            Vulnerable range  : ${vulnerableRange}
-                            First fixed       : ${fixedVersion}
-                            ----------------------------------------
-                            """
-                        }
-
-                        error "❌ Security gate failed: HIGH/CRITICAL Dependabot vulnerabilities found."
+                    if (criticalOrHigh.size() > 0) {
+                        error "❌ Found ${criticalOrHigh.size()} HIGH/CRITICAL Dependabot alerts. Failing pipeline!"
+                    } else {
+                        echo "✅ No HIGH/CRITICAL Dependabot alerts found."
                     }
-
-                    echo "✅ No OPEN HIGH/CRITICAL Dependabot alerts found."
                 }
             }
-
         }
         stage('Docker Build & Push') {
             steps {
