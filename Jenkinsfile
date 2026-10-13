@@ -6,7 +6,7 @@ pipeline {
     }
 
     environment {
-        appVersion = ''
+        APP_VERSION = ''
         REGION    = "us-east-1"
         ACC_ID    = "211125615103"
         PROJECT   = "roboshop"
@@ -27,12 +27,17 @@ pipeline {
             steps {
                 script {
                     def packageJson = readJSON file: 'package.json'
-                    env.appVersion = packageJson.version
 
-                    echo "Package version: ${env.appVersion}"
+                    env.APP_VERSION = packageJson.version?.toString()?.trim()
+
+                    if (!env.APP_VERSION) {
+                        error "❌ Version not found in package.json"
+                    }
+
+                    echo "✅ Package version: ${env.APP_VERSION}"
                 }
             }
-        }
+}
 
         stage('Install Dependencies') {
             steps {
@@ -135,14 +140,14 @@ pipeline {
                             docker build \
                                 --provenance=false \
                                 --sbom=false \
-                                -t ${ACC_ID}.dkr.ecr.${env.REGION}.amazonaws.com/${env.PROJECT}/${env.COMPONENT}:${env.appVersion} .
+                                -t ${ACC_ID}.dkr.ecr.${env.REGION}.amazonaws.com/${env.PROJECT}/${env.COMPONENT}:${env.APP_VERSION} .
 
                             echo "Docker image built successfully."
 
                             echo "Pushing Docker image..."
 
                             docker push \
-                                ${ACC_ID}.dkr.ecr.${env.REGION}.amazonaws.com/${env.PROJECT}/${env.COMPONENT}:${env.appVersion}
+                                ${ACC_ID}.dkr.ecr.${env.REGION}.amazonaws.com/${env.PROJECT}/${env.COMPONENT}:${env.APP_VERSION}
 
                             echo "✅ Docker image pushed successfully."
                         """
@@ -158,7 +163,7 @@ pipeline {
                 script {
                     build job: 'catalogue-cd',
                     parameters: [
-                        string(name: 'appVersion', value: "${env.appVersion}"),
+                        string(name: 'APP_VERSION', value: "${env.APP_VERSION}"),
                         string(name: 'deploy_to', value: 'dev')
                     ],
                     propagate: false,  // even SG fails VPC will not be effected
