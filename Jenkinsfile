@@ -118,31 +118,31 @@ pipeline {
                 script {
                     withAWS(
                         credentials: 'aws-creds',
-                        region: "${REGION}"
+                        region: "${env.REGION}"
                     ) {
                         sh """
                             set -e
 
                             echo "Logging into AWS ECR..."
 
-                            aws ecr get-login-password --region ${REGION} | \
+                            aws ecr get-login-password --region ${env.REGION} | \
                             docker login \
                                 --username AWS \
-                                --password-stdin ${ACC_ID}.dkr.ecr.${REGION}.amazonaws.com
+                                --password-stdin ${ACC_ID}.dkr.ecr.${env.REGION}.amazonaws.com
 
                             echo "Building Docker image..."
 
                             docker build \
                                 --provenance=false \
                                 --sbom=false \
-                                -t ${ACC_ID}.dkr.ecr.${REGION}.amazonaws.com/${PROJECT}/${COMPONENT}:${appVersion} .
+                                -t ${ACC_ID}.dkr.ecr.${env.REGION}.amazonaws.com/${env.PROJECT}/${env.COMPONENT}:${env.appVersion} .
 
                             echo "Docker image built successfully."
 
                             echo "Pushing Docker image..."
 
                             docker push \
-                                ${ACC_ID}.dkr.ecr.${REGION}.amazonaws.com/${PROJECT}/${COMPONENT}:${appVersion}
+                                ${ACC_ID}.dkr.ecr.${env.REGION}.amazonaws.com/${env.PROJECT}/${env.COMPONENT}:${env.appVersion}
 
                             echo "✅ Docker image pushed successfully."
                         """
@@ -158,7 +158,7 @@ pipeline {
                 script {
                     build job: 'catalogue-cd',
                     parameters: [
-                        string(name: 'appVersion', value: "${appVersion}"),
+                        string(name: 'appVersion', value: "${env.appVersion}"),
                         string(name: 'deploy_to', value: 'dev')
                     ],
                     propagate: false,  // even SG fails VPC will not be effected
