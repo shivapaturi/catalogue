@@ -1,111 +1,100 @@
 pipeline {
-    agent {
-        node {
-            label 'AGENT-1'
-        }
+    agent  {
+        label 'AGENT-1'
     }
-
-    environment {
-        APP_VERSION = ""
-        REGION    = "us-east-1"
-        ACC_ID    = "211125615103"
-        PROJECT   = "roboshop"
+    environment { 
+        appVersion = ''
+        REGION = "us-east-1"
+        ACC_ID = "315069654700"
+        PROJECT = "roboshop"
         COMPONENT = "catalogue"
-        GITHUB_TOKEN = credentials('github-token')
     }
-
     options {
-        timeout(time: 30, unit: 'MINUTES')
+        timeout(time: 30, unit: 'MINUTES') 
         disableConcurrentBuilds()
     }
     parameters {
         booleanParam(name: 'deploy', defaultValue: false, description: 'Toggle this value')
     }
+    // Build
     stages {
         stage('Read package.json') {
             steps {
                 script {
                     def packageJson = readJSON file: 'package.json'
                     appVersion = packageJson.version
-                    echo "Package version: ${env.APP_VERSION}"
+                    echo "Package version: ${appVersion}"
                 }
             }
         }
         stage('Install Dependencies') {
             steps {
-                sh '''
-                    npm install
-                '''
+                script {
+                   sh """
+                        npm install
+                   """
+                }
             }
         }
-
         stage('Unit Testing') {
             steps {
-                sh '''
-                    echo "unit tests"
-                '''
+                script {
+                   sh """
+                        echo "unit tests"
+                   """
+                }
             }
         }
-        // stage('Sonar Scan') {
-        //     environment {
-        //         scannerHome = tool 'sonar-8.1'
-        //     }
-        //     steps {
-        //         script {
-        //            // Sonar Server envrionment
-        //            withSonarQubeEnv(installationName: 'sonar-8.1') {
-        //                  sh "${scannerHome}/bin/sonar-scanner"
-        //            }
-        //         }
-        //     }
-        // }
-        // Enable webhook in sonarqube server And wait for Results  
-        // stage("Quality Gate") {
-        //     steps {
-        //         timeout(time: 1, unit: 'HOURS') {
-        //         waitForQualityGate abortPipeline: true
-        //         }
-        //     }
-        // }
-        stage('Check Dependabot Alerts') {
+        /* stage('Sonar Scan') {
+            environment {
+                scannerHome = tool 'sonar-7.2'
+            }
             steps {
-                withCredentials([
-                    string(credentialsId: 'github-token', variable: 'GITHUB_TOKEN')
-                ]) {
-                    script {
-                        def response = sh(
-                            script: '''
-                                curl -sS -L \
-                                    -H "Accept: application/vnd.github+json" \
-                                    -H "Authorization: Bearer $GITHUB_TOKEN" \
-                                    -H "X-GitHub-Api-Version: 2026-03-10" \
-                                    "https://api.github.com/repos/shivapaturi/catalogue/dependabot/alerts"
-                            ''',
-                            returnStdout: true
-                        ).trim()
+                script {
+                   // Sonar Server envrionment
+                   withSonarQubeEnv(installationName: 'sonar-7.2') {
+                         sh "${scannerHome}/bin/sonar-scanner"
+                   }
+                }
+            }
+        } */
+        // Enable webhook in sonarqube server and wait for results
+        /* stage("Quality Gate") {
+            steps {
+                timeout(time: 1, unit: 'HOURS') {
+                waitForQualityGate abortPipeline: true }
+            }
+        } */
+        stage('Check Dependabot Alerts') {
+            environment { 
+                GITHUB_TOKEN = credentials('github-token')
+            }
+            steps {
+                script {
+                    // Fetch alerts from GitHub
+                    def response = sh(
+                        script: """
+                            curl -s -H "Accept: application/vnd.github+json" \
+                                 -H "Authorization: token ${GITHUB_TOKEN}" \
+                                 https://api.github.com/repos/shivapaturi/catalogue/dependabot/alerts
+                        """,
+                        returnStdout: true
+                    ).trim()
 
-                        def json = readJSON(
-                            text: response,
-                            returnPojo: true
-                        )
+                    // Parse JSON
+                    def json = readJSON text: response
 
-                        if (!(json instanceof List)) {
-                            error "❌ GitHub API returned an unexpected response: ${json}"
-                        }
+                    // Filter alerts by severity
+                    def criticalOrHigh = json.findAll { alert ->
+                        def severity = alert?.security_advisory?.severity?.toLowerCase()
+                        def state = alert?.state?.toLowerCase()
+                        return (state == "open" && (severity == "critical" || severity == "high"))
+                    }
 
-                        def criticalOrHigh = json.findAll { alert ->
-                            def severity = alert?.security_advisory?.severity?.toLowerCase()
-                            def state = alert?.state?.toLowerCase()
-
-                            state == 'open' &&
-                            (severity == 'high' || severity == 'critical')
-                        }
-
-                        if (criticalOrHigh) {
-                            error "❌ Found ${criticalOrHigh.size()} OPEN HIGH/CRITICAL Dependabot alert(s)."
-                        }
-
-                        echo "✅ No OPEN HIGH/CRITICAL Dependabot alerts found."
+                    if (criticalOrHigh.size() > 0) {
+                        error "❌ Found ${criticalOrHigh.size()} HIGH/CRITICAL Dependabot alerts. Failing pipeline!"
+                    } else {
+                        echo "✅ No HIGH/CRITICAL Dependabot alerts found."
                     }
                 }
             }
@@ -113,46 +102,17 @@ pipeline {
         stage('Docker Build') {
             steps {
                 script {
-                    withAWS(
-                        credentials: 'aws-creds',
-                        region: "${env.REGION}"
-                    ) {
+                    withAWS(credentials: 'aws-creds', region: 'us-east-1') {
                         sh """
-                            set -e
-
-                            echo "Logging into AWS ECR..."
-
-                            aws ecr get-login-password \
-                                --region ${env.REGION} | \
-                            docker login \
-                                --username AWS \
-                                --password-stdin \
-                                ${env.ACC_ID}.dkr.ecr.${env.REGION}.amazonaws.com
-
-                            echo "Building Docker image..."
-
-                            docker build \
-                                --provenance=false \
-                                --sbom=false \
-                                -t ${env.ACC_ID}.dkr.ecr.${env.REGION}.amazonaws.com/${env.PROJECT}/${env.COMPONENT}:${env.APP_VERSION} .
-
-                            echo "Docker image built successfully."
-
-                            echo "Image:"
-                            echo "${env.ACC_ID}.dkr.ecr.${env.REGION}.amazonaws.com/${env.PROJECT}/${env.COMPONENT}:${env.APP_VERSION}"
-
-                            echo "Pushing Docker image..."
-
-                            docker push \
-                                ${env.ACC_ID}.dkr.ecr.${env.REGION}.amazonaws.com/${env.PROJECT}/${env.COMPONENT}:${env.APP_VERSION}
-
-                            echo "✅ Docker image pushed successfully."
+                            aws ecr get-login-password --region ${REGION} | docker login --username AWS --password-stdin ${ACC_ID}.dkr.ecr.us-east-1.amazonaws.com
+                            docker build -t ${ACC_ID}.dkr.ecr.us-east-1.amazonaws.com/${PROJECT}/${COMPONENT}:${appVersion} .
+                            docker push ${ACC_ID}.dkr.ecr.us-east-1.amazonaws.com/${PROJECT}/${COMPONENT}:${appVersion}
                         """
                     }
                 }
             }
         }
-         stage('Check Scan Results') {
+        stage('Check Scan Results') {
             steps {
                 script {
                     withAWS(credentials: 'aws-creds', region: 'us-east-1') {
@@ -160,9 +120,9 @@ pipeline {
                         def findings = sh(
                             script: """
                                 aws ecr describe-image-scan-findings \
-                                --repository-name ${env.PROJECT}/${env.COMPONENT} \
-                                --image-id imageTag=${env.APP_VERSION} \
-                                --region ${env.REGION} \
+                                --repository-name ${PROJECT}/${COMPONENT} \
+                                --image-id imageTag=${appVersion} \
+                                --region ${REGION} \
                                 --output json
                             """,
                             returnStdout: true
@@ -194,7 +154,7 @@ pipeline {
                 script {
                     build job: 'catalogue-cd',
                     parameters: [
-                        string(name: 'APP_VERSION', value: "${env.APP_VERSION}"),
+                        string(name: 'appVersion', value: "${appVersion}"),
                         string(name: 'deploy_to', value: 'dev')
                     ],
                     propagate: false,  // even SG fails VPC will not be effected
@@ -205,18 +165,16 @@ pipeline {
         
     }
 
-    post {
-        always {
+    post { 
+        always { 
             echo 'I will always say Hello again!'
             deleteDir()
         }
-
-        success {
-            echo 'Hello success!'
+        success { 
+            echo 'Hello Success'
         }
-
-        failure {
-            echo 'Hello failure!'
+        failure { 
+            echo 'Hello Failure'
         }
     }
 }
