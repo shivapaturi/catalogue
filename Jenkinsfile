@@ -115,8 +115,13 @@ pipeline {
         stage('Check Scan Results') {
             steps {
                 script {
-                    withAWS(credentials: 'aws-creds', region: 'us-east-1') {
-                    // Fetch scan findings
+                    withAWS(credentials: 'aws-creds', region: "${REGION}") {
+                        sh """
+                            aws ecr wait image-scan-complete \
+                            --repository-name ${PROJECT}/${COMPONENT} \
+                            --image-id imageTag=${appVersion} \
+                            --region ${REGION}
+                        """
                         def findings = sh(
                             script: """
                                 aws ecr describe-image-scan-findings \
@@ -128,20 +133,14 @@ pipeline {
                             returnStdout: true
                         ).trim()
 
-                        // Parse JSON
-                        def json = readJSON text: findings
+                        def counts = readJSON(text: findings).imageScanFindings.findingSeverityCounts ?: [:]
+                        def high = (counts.HIGH ?: 0) as int
+                        def critical = (counts.CRITICAL ?: 0) as int
 
-                        def highCritical = json.imageScanFindings.findingSeverityCounts {
-                            it.severity == "HIGH" || it.severity == "CRITICAL"
+                        if (high + critical > 0) {
+                            error "❌ Found ${critical} CRITICAL and ${high} HIGH vulnerabilities"
                         }
-
-                        if (highCritical.size() > 0) {
-                            echo "❌ Found ${highCritical.size()} HIGH/CRITICAL vulnerabilities!"
-                            currentBuild.result = 'FAILURE'
-                            error("Build failed due to vulnerabilities")
-                        } else {
-                            echo "✅ No HIGH/CRITICAL vulnerabilities found."
-                        }
+                        echo "✅ No HIGH/CRITICAL vulnerabilities found."
                     }
                 }
             }
