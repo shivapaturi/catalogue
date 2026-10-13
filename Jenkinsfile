@@ -22,7 +22,6 @@ pipeline {
         booleanParam(name: 'deploy', defaultValue: false, description: 'Toggle this value')
     }
     stages {
-
         stage('Read package.json') {
             steps {
                 script {
@@ -37,8 +36,7 @@ pipeline {
                     echo "✅ Package version: ${env.APP_VERSION}"
                 }
             }
-}
-
+        }
         stage('Install Dependencies') {
             steps {
                 sh '''
