@@ -122,24 +122,29 @@ pipeline {
 
                             echo "Logging into AWS ECR..."
 
-                            aws ecr get-login-password --region ${env.REGION} | \
+                            aws ecr get-login-password \
+                                --region ${env.REGION} | \
                             docker login \
                                 --username AWS \
-                                --password-stdin ${ACC_ID}.dkr.ecr.${env.REGION}.amazonaws.com
+                                --password-stdin \
+                                ${env.ACC_ID}.dkr.ecr.${env.REGION}.amazonaws.com
 
                             echo "Building Docker image..."
 
                             docker build \
                                 --provenance=false \
                                 --sbom=false \
-                                -t ${ACC_ID}.dkr.ecr.${env.REGION}.amazonaws.com/${env.PROJECT}/${env.COMPONENT}:${env.APP_VERSION} .
+                                -t ${env.ACC_ID}.dkr.ecr.${env.REGION}.amazonaws.com/${env.PROJECT}/${env.COMPONENT}:${env.APP_VERSION} .
 
                             echo "Docker image built successfully."
+
+                            echo "Image:"
+                            echo "${env.ACC_ID}.dkr.ecr.${env.REGION}.amazonaws.com/${env.PROJECT}/${env.COMPONENT}:${env.APP_VERSION}"
 
                             echo "Pushing Docker image..."
 
                             docker push \
-                                ${ACC_ID}.dkr.ecr.${env.REGION}.amazonaws.com/${env.PROJECT}/${env.COMPONENT}:${env.APP_VERSION}
+                                ${env.ACC_ID}.dkr.ecr.${env.REGION}.amazonaws.com/${env.PROJECT}/${env.COMPONENT}:${env.APP_VERSION}
 
                             echo "✅ Docker image pushed successfully."
                         """
