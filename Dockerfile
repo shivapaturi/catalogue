@@ -1,18 +1,32 @@
+# Stage 1: Builder
 FROM node:20-alpine3.20 AS builder
-WORKDIR /opt/server
-COPY package.json .
-COPY *.js .
-RUN npm install
 
+WORKDIR /opt/server
+
+COPY package*.json ./
+RUN npm ci
+
+COPY *.js ./
+
+
+# Stage 2: Runtime
 FROM node:20-alpine3.20
-RUN addgroup -S roboshop && adduser -S roboshop -G roboshop
-RUN apk update && apk add --no-cache --upgrade musl openssl
+
+RUN apk update && \
+    apk upgrade --no-cache && \
+    addgroup -S roboshop && \
+    adduser -S roboshop -G roboshop
+
 ENV MONGO="true" \
     MONGO_URL="mongodb://mongodb:27017/catalogue"
+
 WORKDIR /opt/server
+
+COPY --from=builder --chown=roboshop:roboshop /opt/server /opt/server
+
 USER roboshop
-COPY --from=builder /opt/server /opt/server
-CMD ["node","server.js"]
+
+CMD ["node", "server.js"]
 
 # FROM node:20-alpine3.21
 
