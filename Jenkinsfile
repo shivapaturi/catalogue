@@ -6,7 +6,7 @@ pipeline {
     }
 
     environment {
-        APP_VERSION = "packageJson.version?.toString()?.trim()"
+        APP_VERSION = ""
         REGION    = "us-east-1"
         ACC_ID    = "211125615103"
         PROJECT   = "roboshop"
@@ -26,8 +26,14 @@ pipeline {
             steps {
                 script {
                     def packageJson = readJSON file: 'package.json'
-                    appVersion = packageJson.version
-                    echo "Package version: ${env.APP_VERSION}"
+
+                    env.APP_VERSION = packageJson.version?.toString()?.trim()
+
+                    if (!env.APP_VERSION) {
+                        error "❌ Version not found in package.json"
+                    }
+
+                    echo "✅ Package version: ${env.APP_VERSION}"
                 }
             }
         }
