@@ -112,7 +112,7 @@ pipeline {
                 }
             }
         }
-         stage('Check Scan Results') {
+        stage('Check Scan Results') {
             steps {
                 script {
                     withAWS(credentials: 'aws-creds', region: 'us-east-1') {
@@ -131,7 +131,7 @@ pipeline {
                         // Parse JSON
                         def json = readJSON text: findings
 
-                        def highCritical = json.imageScanFindings.findings.findAll {
+                        def highCritical = json.imageScanFindings.findingSeverityCounts {
                             it.severity == "HIGH" || it.severity == "CRITICAL"
                         }
 
