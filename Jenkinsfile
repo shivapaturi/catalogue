@@ -114,38 +114,42 @@ pipeline {
             }
         }
         stage('Docker Build') {
-                steps {
-                    script {
-                        withAWS(
-                            credentials: 'aws-creds',
-                            region: "${REGION}"
-                        ) {
-                            sh """
-                                set -e
+            steps {
+                script {
+                    withAWS(
+                        credentials: 'aws-creds',
+                        region: "${REGION}"
+                    ) {
+                        sh """
+                            set -e
 
-                                echo "Logging into AWS ECR..."
+                            echo "Logging into AWS ECR..."
 
-                                aws ecr get-login-password --region ${REGION} | \
-                                docker login \
-                                    --username AWS \
-                                    --password-stdin ${ACC_ID}.dkr.ecr.us-east-1.amazonaws.com
+                            aws ecr get-login-password --region ${REGION} | \
+                            docker login \
+                                --username AWS \
+                                --password-stdin ${ACC_ID}.dkr.ecr.${REGION}.amazonaws.com
 
-                                echo "Building Docker image..."
+                            echo "Building Docker image..."
 
-                                docker build \
-                                    --provenance=false \
-                                    --sbom=false \
-                                    -t ${ACC_ID}.dkr.ecr.us-east-1.amazonaws.com/${PROJECT}/${COMPONENT}:${appVersion} .
+                            docker build \
+                                --provenance=false \
+                                --sbom=false \
+                                -t ${ACC_ID}.dkr.ecr.${REGION}.amazonaws.com/${PROJECT}/${COMPONENT}:${appVersion} .
 
-                                echo "Pushing Docker image..."
+                            echo "Docker image built successfully."
 
-                                docker push \
-                                    ${ACC_ID}.dkr.ecr.us-east-1.amazonaws.com/${PROJECT}/${COMPONENT}:${appVersion}
-                            """
-                        }
+                            echo "Pushing Docker image..."
+
+                            docker push \
+                                ${ACC_ID}.dkr.ecr.${REGION}.amazonaws.com/${PROJECT}/${COMPONENT}:${appVersion}
+
+                            echo "✅ Docker image pushed successfully."
+                        """
                     }
                 }
             }
+        }
         stage('Trigger Deploy') {
             when{
                 expression { params.deploy }
