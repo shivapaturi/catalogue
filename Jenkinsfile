@@ -21,6 +21,7 @@ pipeline {
     }
 
     stages {
+
         stage('Read package.json') {
             steps {
                 script {
@@ -42,6 +43,27 @@ pipeline {
                 sh 'echo "unit tests"'
             }
         }
+
+        /*
+        stage('Sonar Scan') {
+            environment {
+                scannerHome = tool 'sonar-7.2'
+            }
+            steps {
+                withSonarQubeEnv(installationName: 'sonar-7.2') {
+                    sh "${scannerHome}/bin/sonar-scanner"
+                }
+            }
+        }
+
+        stage('Quality Gate') {
+            steps {
+                timeout(time: 1, unit: 'HOURS') {
+                    waitForQualityGate abortPipeline: true
+                }
+            }
+        }
+        */
 
         stage('Check Dependabot Alerts') {
             environment {
@@ -81,8 +103,14 @@ pipeline {
                 withAWS(credentials: 'aws-creds', region: "${REGION}") {
                     sh """
                         aws ecr get-login-password --region ${REGION} | docker login --username AWS --password-stdin ${REGISTRY}
-                        docker build -t ${REGISTRY}/${PROJECT}/${COMPONENT}:${appVersion} .
-                        docker push ${REGISTRY}/${PROJECT}/${COMPONENT}:${appVersion}
+
+                        # Single-platform image, no attestations -> plain image manifest (scannable by ECR)
+                        docker buildx build \
+                          --platform linux/amd64 \
+                          --provenance=false \
+                          --sbom=false \
+                          -t ${REGISTRY}/${PROJECT}/${COMPONENT}:${appVersion} \
+                          --push .
                     """
                 }
             }
@@ -92,8 +120,14 @@ pipeline {
             steps {
                 script {
                     withAWS(credentials: 'aws-creds', region: "${REGION}") {
-                        // Block until the scan finishes (polls every 5s, up to ~10 min)
+
+                        // Start a scan (ignore error if scan-on-push already scanned it / 24h limit)
                         sh """
+                            aws ecr start-image-scan \
+                              --repository-name ${PROJECT}/${COMPONENT} \
+                              --image-id imageTag=${appVersion} \
+                              --region ${REGION} || true
+
                             aws ecr wait image-scan-complete \
                               --repository-name ${PROJECT}/${COMPONENT} \
                               --image-id imageTag=${appVersion} \
@@ -111,12 +145,16 @@ pipeline {
                             returnStdout: true
                         ).trim()
 
-                        def counts = findings.imageScanFindings?.findingSeverityCounts ?: [:]
-                        def high = (counts.HIGH ?: 0) as int
+                        def counts   = findings.imageScanFindings?.findingSeverityCounts ?: [:]
                         def critical = (counts.CRITICAL ?: 0) as int
+                        def high     = (counts.HIGH ?: 0) as int
                         echo "ECR scan severity counts: ${counts}"
 
-                        if (high + critical > 0) {
+                        if (critical + high > 0) {
+                            def list = findings.imageScanFindings?.findings ?: []
+                            list.findAll { it.severity in ['CRITICAL', 'HIGH'] }.each {
+                                echo "${it.severity} - ${it.name}"
+                            }
                             error "Found ${critical} CRITICAL and ${high} HIGH vulnerabilities in image."
                         }
                         echo "No HIGH/CRITICAL vulnerabilities found."
