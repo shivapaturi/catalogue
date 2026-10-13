@@ -114,48 +114,116 @@ pipeline {
             }
         }
         stage('Docker Build') {
-            steps {
-                script {
-                    withAWS(credentials: 'aws-creds', region: 'us-east-1') {
-                        sh """
-                            aws ecr get-login-password --region ${REGION} | docker login --username AWS --password-stdin ${ACC_ID}.dkr.ecr.us-east-1.amazonaws.com
-                            docker build -t ${ACC_ID}.dkr.ecr.us-east-1.amazonaws.com/${PROJECT}/${COMPONENT}:${appVersion} .
-                            docker push ${ACC_ID}.dkr.ecr.us-east-1.amazonaws.com/${PROJECT}/${COMPONENT}:${appVersion}
-                        """
+                steps {
+                    script {
+                        withAWS(
+                            credentials: 'aws-creds',
+                            region: "${REGION}"
+                        ) {
+                            sh """
+                                set -e
+
+                                echo "Logging into AWS ECR..."
+
+                                aws ecr get-login-password --region ${REGION} | \
+                                docker login \
+                                    --username AWS \
+                                    --password-stdin ${ACC_ID}.dkr.ecr.us-east-1.amazonaws.com
+
+                                echo "Building Docker image..."
+
+                                docker build \
+                                    --provenance=false \
+                                    --sbom=false \
+                                    -t ${ACC_ID}.dkr.ecr.us-east-1.amazonaws.com/${PROJECT}/${COMPONENT}:${appVersion} .
+
+                                echo "Pushing Docker image..."
+
+                                docker push \
+                                    ${ACC_ID}.dkr.ecr.us-east-1.amazonaws.com/${PROJECT}/${COMPONENT}:${appVersion}
+                            """
+                        }
                     }
                 }
             }
-        }
         stage('Check Scan Results') {
             steps {
                 script {
-                    withAWS(credentials: 'aws-creds', region: 'us-east-1') {
-                    // Fetch scan findings
+                    withAWS(
+                        credentials: 'aws-creds',
+                        region: "${REGION}"
+                    ) {
+
+                        echo "Waiting for ECR image scan to complete..."
+
+                        sh """
+                            aws ecr wait image-scan-complete \
+                                --repository-name ${PROJECT}/${COMPONENT} \
+                                --image-id imageTag=${appVersion} \
+                                --region ${REGION}
+                        """
+
+                        echo "Fetching scan findings..."
+
                         def findings = sh(
                             script: """
                                 aws ecr describe-image-scan-findings \
-                                --repository-name ${PROJECT}/${COMPONENT} \
-                                --image-id imageTag=${appVersion} \
-                                --region ${REGION} \
-                                --output json
+                                    --repository-name ${PROJECT}/${COMPONENT} \
+                                    --image-id imageTag=${appVersion} \
+                                    --region ${REGION} \
+                                    --output json
                             """,
                             returnStdout: true
                         ).trim()
 
-                        // Parse JSON
-                        def json = readJSON text: findings
+                        def json = readJSON(
+                            text: findings,
+                            returnPojo: true
+                        )
 
-                        def highCritical = json.imageScanFindings.findings.findAll {
-                            it.severity == "HIGH" || it.severity == "CRITICAL"
-                        }
+                        def basicFindings =
+                            json?.imageScanFindings?.findings ?: []
+
+                        def enhancedFindings =
+                            json?.imageScanFindings?.enhancedFindings ?: []
+
+                        def highCritical = []
+
+                        highCritical.addAll(
+                            basicFindings.findAll {
+                                it?.severity == 'HIGH' ||
+                                it?.severity == 'CRITICAL'
+                            }
+                        )
+
+                        highCritical.addAll(
+                            enhancedFindings.findAll {
+                                it?.severity == 'HIGH' ||
+                                it?.severity == 'CRITICAL'
+                            }
+                        )
+
+                        echo "Total HIGH/CRITICAL findings: ${highCritical.size()}"
 
                         if (highCritical.size() > 0) {
-                            echo "❌ Found ${highCritical.size()} HIGH/CRITICAL vulnerabilities!"
-                            currentBuild.result = 'FAILURE'
-                            error("Build failed due to vulnerabilities")
-                        } else {
-                            echo "✅ No HIGH/CRITICAL vulnerabilities found."
+
+                            echo "❌ HIGH/CRITICAL vulnerabilities found!"
+
+                            highCritical.each { finding ->
+                                echo """
+                                ----------------------------------------
+                                Vulnerability : ${finding?.name ?: finding?.title ?: 'N/A'}
+                                Severity      : ${finding?.severity ?: 'N/A'}
+                                Package       : ${finding?.packageVulnerabilityDetails?.vulnerablePackages ?: 'N/A'}
+                                URI           : ${finding?.uri ?: finding?.findingArn ?: 'N/A'}
+                                ----------------------------------------
+                                """
+                            }
+
+                            error("❌ Build failed due to HIGH/CRITICAL vulnerabilities.")
                         }
+
+                        echo "✅ No HIGH/CRITICAL vulnerabilities found."
                     }
                 }
             }
